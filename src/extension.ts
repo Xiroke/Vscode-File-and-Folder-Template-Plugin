@@ -23,12 +23,16 @@ export function activate(context: vscode.ExtensionContext) {
         const templatePaths: string[] = config.get("templatePaths") || [];
 
         const defaultPath = path.join(rootPath, ".templates");
-        if (fs.existsSync(defaultPath)) templatePaths.push(defaultPath);
+        if (fs.existsSync(defaultPath)) {
+          templatePaths.push(defaultPath);
+        }
 
         const templates: string[] = [];
         for (const rel of templatePaths) {
           const abs = path.resolve(rootPath, rel);
-          if (fs.existsSync(abs)) templates.push(abs);
+          if (fs.existsSync(abs)) {
+            templates.push(abs);
+          }
         }
 
         const targetPath = uri.fsPath;
@@ -56,7 +60,9 @@ export function activate(context: vscode.ExtensionContext) {
           visibleTemplates.map((t) => t.name),
           { placeHolder: "Select a template to copy" }
         );
-        if (!selected) return;
+        if (!selected) {
+          return;
+        }
 
         const template = allTemplates.find((t) => t.name === selected)!;
 
@@ -144,7 +150,9 @@ function copyTemplateWithFileIncludes(
   vars: Record<string, string>,
   templateRoots: string[]
 ) {
-  if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
 
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
     const srcPath = path.join(src, entry.name);
@@ -271,11 +279,21 @@ function buildSmartNameVariants(input: string): {
 function detectPlaceholderVariant(
   inner: string
 ): "lower" | "pascal" | "upper" | "snake" | "kebab" | "camel" {
-  if (inner.includes("-")) return "kebab";
-  if (inner.includes("_")) return "snake";
-  if (/^[A-Z0-9_]+$/.test(inner)) return "upper";
-  if (/^[a-z0-9]+$/.test(inner)) return "lower";
-  if (/^[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*$/.test(inner)) return "camel";
+  if (inner.includes("-")) {
+    return "kebab";
+  }
+  if (inner.includes("_")) {
+    return "snake";
+  }
+  if (/^[A-Z0-9_]+$/.test(inner)) {
+    return "upper";
+  }
+  if (/^[a-z0-9]+$/.test(inner)) {
+    return "lower";
+  }
+  if (/^[a-z][a-z0-9]*[A-Z][A-Za-z0-9]*$/.test(inner)) {
+    return "camel";
+  }
   return "pascal";
 }
 
@@ -284,7 +302,9 @@ function detectPlaceholderVariant(
  * Returns a Set of strings like "__naMe__".
  */
 function findTemplateVars(dir: string, found = new Set<string>()): Set<string> {
-  if (!fs.existsSync(dir)) return found;
+  if (!fs.existsSync(dir)) {
+    return found;
+  }
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const entryPath = path.join(dir, entry.name);
 
@@ -292,7 +312,9 @@ function findTemplateVars(dir: string, found = new Set<string>()): Set<string> {
     const nameMatches = entry.name.match(/__([A-Za-z0-9_-]+)__/g);
     if (nameMatches) {
       nameMatches.forEach((m) => {
-        if (!m.startsWith("__INCLUDE__")) found.add(m);
+        if (!m.startsWith("__INCLUDE__")) {
+          found.add(m);
+        }
       });
     }
 
@@ -305,7 +327,9 @@ function findTemplateVars(dir: string, found = new Set<string>()): Set<string> {
         const contentMatches = content.match(/__([A-Za-z0-9_-]+)__/g);
         if (contentMatches) {
           contentMatches.forEach((m) => {
-            if (!m.startsWith("__INCLUDE__")) found.add(m);
+            if (!m.startsWith("__INCLUDE__")) {
+              found.add(m);
+            }
           });
         }
       } catch (e) {
