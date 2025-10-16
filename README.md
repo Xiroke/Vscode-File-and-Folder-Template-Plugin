@@ -12,6 +12,7 @@
 - В консоли переходите в эту директорию и пишите
 
   ```
+  npm i
   npm install -g @vscode/vsce
   vsce package
   code --install-extension .\(Название файла).vsix
@@ -27,17 +28,17 @@
 
 - В шаблонах можно указать вводимое название при созданни используя следующие значения:
 
-  `__name__` - lower (printline),
+  `__namecase__` - lower (printline),
 
-  `__NaMe__` pascal (PrintLine),
+  `__NameCase__` pascal (PrintLine),
 
-  `__NAME__` upper (PRINTLINE),
+  `__NAMECASE__` upper (PRINTLINE),
 
-  `__na_me__` snake (print_line),
+  `__name_case__` snake (print_line),
 
-  `__na-me__` kebab (print-line),
+  `__name-case__` kebab (print-line),
 
-  `__naMe__` camel (printLine)
+  `__nameCase__` camel (printLine)
 
 - При необходимости ввода ещё одного названия надо добавить число после name
   `__name2__`, `__NaMe2__`

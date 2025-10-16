@@ -17,21 +17,22 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         const rootPath = workspaceFolders[0].uri.fsPath;
-        const config = vscode.workspace.getConfiguration("testplugin");
-        const templatePaths: string[] = config.get("templatePaths") || [];
-        const defaultPath = path.join(rootPath, ".templates");
-        if (fs.existsSync(defaultPath)) {
-          templatePaths.push(defaultPath);
-        }
-        const templates: string[] = [];
-        for (const rel of templatePaths) {
-          const abs = path.resolve(rootPath, rel);
-          if (fs.existsSync(abs)) {
-            templates.push(abs);
-          }
-        }
         const targetPath = uri.fsPath;
-        const allTemplates = templates.flatMap((dir) =>
+
+        // Получаем доступные шаблоны для текущей папки
+        const availableTemplates = getAvailableTemplatesForPath(
+          targetPath,
+          rootPath
+        );
+
+        if (availableTemplates.length === 0) {
+          vscode.window.showWarningMessage(
+            "No .templates folder found in parent directories."
+          );
+          return;
+        }
+
+        const allTemplates = availableTemplates.flatMap((dir) =>
           fs
             .readdirSync(dir, { withFileTypes: true })
             .filter((d) => d.isDirectory())
@@ -66,21 +67,28 @@ export function activate(context: vscode.ExtensionContext) {
 
         const allVarsSet = findAllTemplateVars(
           templateFull,
-          templates,
+          availableTemplates,
           templateLookup
         );
         const allVars = Array.from(allVarsSet);
         if (allVars.length === 0) {
           vscode.window.showWarningMessage("No template variables found.");
         }
+
+        // Группируем переменные по базовому имени (без "case" и стиля)
         const groups = new Map<string, Set<string>>();
         for (const ph of allVars) {
           const inner = ph.replace(/^__|__$/g, "");
-          const normalized = inner.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+          // Убираем "case" в конце и все специальные символы для нормализации
+          const normalized = inner
+            .replace(/[Cc][Aa][Ss][Ee]$/i, "")
+            .replace(/[^A-Za-z0-9]/g, "")
+            .toLowerCase();
           const s = groups.get(normalized) ?? new Set<string>();
           s.add(ph);
           groups.set(normalized, s);
         }
+
         const uniqueNormalized = Array.from(groups.keys());
         const formValues: Record<string, string> = {};
         for (const norm of uniqueNormalized) {
@@ -95,6 +103,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
           formValues[norm] = value;
         }
+
         const vars: Record<string, string> = {};
         for (const [normalized, placeholders] of groups.entries()) {
           const userValue = formValues[normalized];
@@ -106,11 +115,12 @@ export function activate(context: vscode.ExtensionContext) {
             vars[ph] = replacement;
           }
         }
+
         await copyTemplateWithFileIncludes(
           templateFull,
           targetPath,
           vars,
-          templates,
+          availableTemplates,
           templateLookup
         );
         vscode.window.showInformationMessage(
@@ -122,6 +132,56 @@ export function activate(context: vscode.ExtensionContext) {
     }
   );
   context.subscriptions.push(buttonCreateTemplateImplementation);
+}
+
+function getAvailableTemplatesForPath(
+  targetPath: string,
+  rootPath: string
+): string[] {
+  const available: string[] = [];
+  let currentPath = path.normalize(targetPath);
+  const normalizedRoot = path.normalize(rootPath);
+
+  // Идем вверх по иерархии от targetPath до rootPath
+  while (currentPath.startsWith(normalizedRoot)) {
+    const parentDir = path.dirname(currentPath);
+
+    // Проверяем, есть ли .templates в родительской директории
+    const templatesPath = path.join(parentDir, ".templates");
+    if (
+      fs.existsSync(templatesPath) &&
+      fs.statSync(templatesPath).isDirectory()
+    ) {
+      if (!available.includes(templatesPath)) {
+        available.push(templatesPath);
+      }
+    }
+
+    // Проверяем конфигурацию для дополнительных путей шаблонов
+    const config = vscode.workspace.getConfiguration("testplugin");
+    const configuredPaths: string[] = config.get("templatePaths") || [];
+    for (const relPath of configuredPaths) {
+      const absPath = path.resolve(rootPath, relPath);
+      if (fs.existsSync(absPath) && fs.statSync(absPath).isDirectory()) {
+        // Проверяем, что этот путь находится в иерархии от currentPath
+        const templateParent = path.dirname(absPath);
+        if (
+          currentPath.startsWith(templateParent) &&
+          !available.includes(absPath)
+        ) {
+          available.push(absPath);
+        }
+      }
+    }
+
+    // Если достигли корня, прекращаем
+    if (parentDir === currentPath) {
+      break;
+    }
+    currentPath = parentDir;
+  }
+
+  return available;
 }
 
 function findTemplatePath(
@@ -221,26 +281,29 @@ function buildSmartNameVariants(input: string): {
 function detectPlaceholderVariant(
   inner: string
 ): "lower" | "pascal" | "upper" | "snake" | "kebab" | "camel" {
-  if (inner.includes("-")) {
+  // Убираем "case" в конце для определения стиля
+  const withoutCase = inner.replace(/[Cc][Aa][Ss][Ee]$/i, "");
+
+  if (withoutCase.includes("-")) {
     return "kebab";
   }
-  if (inner.includes("_")) {
+  if (withoutCase.includes("_")) {
     return "snake";
   }
-  if (/^[A-Z0-9]+$/.test(inner)) {
+  if (/^[A-Z0-9]+$/.test(withoutCase)) {
     return "upper";
   }
-  if (/^[a-z0-9]+$/.test(inner)) {
+  if (/^[a-z0-9]+$/.test(withoutCase)) {
     return "lower";
   }
-  if (/^[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/.test(inner)) {
+  if (/^[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/.test(withoutCase)) {
     return "camel";
   }
-  if (/^[A-Z][A-Za-z0-9]*$/.test(inner)) {
+  if (/^[A-Z][A-Za-z0-9]*$/.test(withoutCase)) {
     return "pascal";
   }
-  if (/[A-Z]/.test(inner) && /[a-z]/.test(inner)) {
-    if (/^[A-Z]/.test(inner)) {
+  if (/[A-Z]/.test(withoutCase) && /[a-z]/.test(withoutCase)) {
+    if (/^[A-Z]/.test(withoutCase)) {
       return "pascal";
     }
     return "camel";
@@ -250,14 +313,21 @@ function detectPlaceholderVariant(
 
 function replaceVars(str: string, vars: Record<string, string>): string {
   let result = str;
+
+  // Сортируем по длине ключа (от большего к меньшему)
   const entries = Object.entries(vars).sort(
     (a, b) => b[0].length - a[0].length
   );
+
   for (const [key, value] of entries) {
+    // Создаем regex, который НЕ захватывает дополнительные подчеркивания
+    // Используем negative lookbehind и lookahead для подчеркиваний
     const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
     const regex = new RegExp(escapedKey, "g");
     result = result.replace(regex, value);
   }
+
   return result;
 }
 
@@ -296,13 +366,12 @@ function findAllTemplateVars(
       continue;
     }
 
-    const nameMatches = entry.name.match(/__([A-Za-z0-9][A-Za-z0-9_-]*)__/g);
+    // Ищем только переменные, которые заканчиваются на "case" (регистронезависимо)
+    const nameMatches = entry.name.match(
+      /__([A-Za-z0-9][A-Za-z0-9_-]*[Cc][Aa][Ss][Ee])__/g
+    );
     if (nameMatches) {
-      nameMatches.forEach((m) => {
-        if (!m.startsWith("__INCLUDE__")) {
-          found.add(m);
-        }
-      });
+      nameMatches.forEach((m) => found.add(m));
     }
 
     if (entry.isDirectory()) {
@@ -317,14 +386,10 @@ function findAllTemplateVars(
       try {
         const content = fs.readFileSync(entryPath, "utf8");
         const contentMatches = content.match(
-          /__([A-Za-z0-9][A-Za-z0-9_-]*)__/g
+          /__([A-Za-z0-9][A-Za-z0-9_-]*[Cc][Aa][Ss][Ee])__/g
         );
         if (contentMatches) {
-          contentMatches.forEach((m) => {
-            if (!m.startsWith("__INCLUDE__")) {
-              found.add(m);
-            }
-          });
+          contentMatches.forEach((m) => found.add(m));
         }
       } catch {}
     }
