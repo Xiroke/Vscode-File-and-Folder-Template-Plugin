@@ -281,33 +281,35 @@ function buildSmartNameVariants(input: string): {
 function detectPlaceholderVariant(
   inner: string
 ): "lower" | "pascal" | "upper" | "snake" | "kebab" | "camel" {
-  // Убираем "case" в конце для определения стиля
-  const withoutCase = inner.replace(/[Cc][Aa][Ss][Ee]$/i, "");
+  // Сначала простые детекторы по разделителям
+  if (inner.includes("-")) return "kebab";
+  if (inner.includes("_")) return "snake";
 
-  if (withoutCase.includes("-")) {
-    return "kebab";
-  }
-  if (withoutCase.includes("_")) {
-    return "snake";
-  }
-  if (/^[A-Z0-9]+$/.test(withoutCase)) {
+  // Если вся строка в верхнем регистре и заканчивается на 'CASE' — UPPER
+  if (inner === inner.toUpperCase() && inner.toUpperCase().endsWith("CASE")) {
     return "upper";
   }
-  if (/^[a-z0-9]+$/.test(withoutCase)) {
+
+  // Если строка заканчивается на 'Case' (с заглавной C) — различаем Pascal/Camel
+  if (inner.endsWith("Case")) {
+    const first = inner.charAt(0);
+    // Начинается с заглавной — Pascal (NameCase)
+    if (first === first.toUpperCase()) return "pascal";
+    // Иначе — camel (nameCase)
+    return "camel";
+  }
+
+  // Если вся строка в нижнем регистре и заканчивается на 'case' — lower
+  if (inner === inner.toLowerCase() && inner.toLowerCase().endsWith("case")) {
     return "lower";
   }
-  if (/^[a-z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/.test(withoutCase)) {
-    return "camel";
+
+  // Фоллбэки: если где-то есть заглавные буквы — camel/pascal
+  if (/[A-Z]/.test(inner)) {
+    return /^[A-Z]/.test(inner) ? "pascal" : "camel";
   }
-  if (/^[A-Z][A-Za-z0-9]*$/.test(withoutCase)) {
-    return "pascal";
-  }
-  if (/[A-Z]/.test(withoutCase) && /[a-z]/.test(withoutCase)) {
-    if (/^[A-Z]/.test(withoutCase)) {
-      return "pascal";
-    }
-    return "camel";
-  }
+
+  // По умолчанию — lower
   return "lower";
 }
 
